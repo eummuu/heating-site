@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>히터 조정 패널</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Do+Hyeon&family=Noto+Sans+KR:wght@100..900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href = "style.css">
+</head>
+<body>
+    <!-- 우측 상단의 고정된 초기화면 버튼 -->
+    <button id="return-button" class="top-right-button">초기화면</button>
+
+    <!-- 히터 조정 패널 위 이미지 -->
+    <img src="Logo.png" alt="패널 이미지" class="top-image">
+
+    <div id="specselectpage" class="specselectpage">
+        <div class="specselectpage-content">
+            <h2>사용자의 컴퓨터 사양을<br>선택해주십시오.</h2>
+            <button class="lowspec-button" onclick="selectSpec('low')">저사양</button>
+            <button class="hispec-button" onclick="selectSpec('high')">고사양</button>
+        </div>
+    </div>
+
+    <!-- 히터 조정 패널 -->
+    <div id="main-content" class="container hidden">
+        <h1>히터 조정 패널</h1>
+        <div class="power-section">
+            <input type="checkbox" id="power"> 
+            <label for="power" class="power-label">전원</label>
+            <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/89/HD_transparent_picture.png/800px-HD_transparent_picture.png?20200606142532" alt="작동 중" class="justforarea" id="justforarea" width="50", height="50">
+            <img id="status-indicator" src="https://media1.tenor.com/m/5qX_vH01xasAAAAd/lights.gif" alt="작동 중" style="width: 50px; height: 50px; margin-left: auto; display: none;">
+        </div>
+        <div class="temperature-control">
+            <div class="temperature-display">온도: <span id="temperature-value">22.5</span> ℃</div>
+            <div>
+                <button id="decrease-temp" class="decrease-button" onclick="adjustTemperature(-1)">-</button>
+                <button id="increase-temp" class="increase-button" onclick="adjustTemperature(1)">+</button>
+            </div>
+        </div>
+        <button class="emergency-button" onclick="emergencyShutdown()">⚠️ 비상 정지</button>
+    </div>
+
+    <!-- 추가 텍스트 -->
+    <p class="footer-text"  >Heating-site의 사용으로 인해 발생하는 일은 전적으로 사용자에게 있으며, <br> 개발자는 사용자가 해당 사이트를 이용하는 과정에서 발생하는 물질적, 정신적 피해에는 책임을 지지 않습니다.<br>사용자가 Heating-site 기능 이용 시, 본 약관에 동의한 것으로 간주됩니다.</p>
+
+    <!-- 로그 정보 표시 -->
+    <details class="log-details" style="margin-top: 20px;">
+        <summary>조작 로그 보기</summary>
+        <div class="log-content">
+            <p>현재 모드: <span id="mode-status">저사양</span></p> <!-- 모드 상태 표시 -->
+            <p>연산 반복 횟수: <span id="operation-count">0</span></p>
+            <p>현재 실행 주기: <span id="current-interval">0</span> ms</p>
+        </div>
+    </details>
+
+    <div id="confirm-returntoselectpage" class="returntoselectpage hidden">
+        <div class="returntoselectpage-content">
+            <p>전원을 해제하고<br>컴퓨터 사양 선택 화면으로 돌아가시겠습니까?<br><br>이 작업은 취소할 수 없습니다.</p>
+            <button class="confirm-yes" id="confirm-yes">예, 돌아가겠습니다</button>
+            <button class="confirm-no" id="confirm-no">아니오</button>
+        </div>
+    </div>
+    <script>
+        
+        let 고사양인가요 = false;
+        let 현재온도단계 = 1; // 온도 초기값 설정
+        const 전원체크박스 = document.getElementById('power');
+        const 반복빈도수 = [200, 100, 50, 10, 5, 1, 0.5, 0.1, 0.05, 0.001];
+        const 온도표시단계 = [22.5, 23.0, 23.5, 24.0, 24.5, 25.0, 25.5, 26.0, 26.5, 27.0];
+        const 온도값 = document.getElementById('temperature-value');
+        const 운전상태표시 = document.getElementById('status-indicator');
+        const 온도낮추기버튼 = document.getElementById('decrease-temp');
+        const 온도올리기버튼 = document.getElementById('increase-temp');
+        const 연산실행 = document.getElementById('operation-count');
+        const 현재반복주기 = document.getElementById('current-interval');
+        let 연산주기 = null;
+        let 연산횟수 = 0;
+        let i = 0;
+    
+        
+    
+        function selectSpec(spec) { // 사양 선택
+            고사양인가요 = spec === 'high';
+            toggleDisplay('specselectpage', false);
+            toggleDisplay('main-content', true);
+            updateStatusIndicator();
+            updateModeStatus(); // 모드 상태 업데이트 함수 호출
+        }
+    
+        function updateStatusIndicator() {
+            운전상태표시.style.display = 전원체크박스.checked ? 'inline' : 'none';
+        }
+    
+        function startCalculationLoop() {
+            stopCalculationLoop(); // 기존 반복 중지
+            const interval = getIntervalFromTemperature(); // 온도에 따른 간격 설정
+            i = 0; // 연산 변수 초기화
+            현재반복주기.textContent = interval; // 주기 정보 업데이트
+
+            연산주기 = setInterval(() => {
+                연산횟수++; // 연산횟수 증가
+                연산실행.textContent = 연산횟수; // 연산 횟수 업데이트
+                if (고사양인가요) {
+            // 고사양:
+                i = i ** i;
+                i++;
+                i = i ** i;
+                i++;
+                i = i ** i;
+                i++;
+        } else {
+            // 저사양
+                i = i ** i;
+                i++;
+        }
+            }, interval);
+        }
+    
+        function stopCalculationLoop() {
+            if (연산주기 !== null) {
+                clearInterval(연산주기);
+                연산주기 = null;
+            }
+        }
+    
+        function getIntervalFromTemperature() {
+            return 반복빈도수[현재온도단계 - 1];
+        }
+    
+        function adjustTemperature(change) {
+            현재온도단계 = Math.min(10, Math.max(1, 현재온도단계 + change));
+            온도값.textContent = 온도표시단계[현재온도단계 - 1].toFixed(1); // 소수점 한 자리까지 표시
+            updateTemperatureButtons();
+
+            if (전원체크박스.checked) {
+                startCalculationLoop();
+            }
+        }
+
+    
+        function updateTemperatureButtons() {
+            온도낮추기버튼.disabled = 현재온도단계 <= 1;
+            온도올리기버튼.disabled = 현재온도단계 >= 10;
+        }
+    
+        function emergencyShutdown() {
+            전원체크박스.checked = false;
+            updateStatusIndicator();
+            stopCalculationLoop(); // 비상 정지 시 반복 중지
+            alert('비상 정지가 활성화되었습니다!');
+        }
+    
+        
+
+    function updateModeStatus() {
+        const modeStatusElement = document.getElementById('mode-status');
+        if (고사양인가요) {
+            modeStatusElement.textContent = "고사양";
+            modeStatusElement.classList.remove("low-spec");
+            modeStatusElement.classList.add("high-spec");
+        } else {
+            modeStatusElement.textContent = "저사양";
+            modeStatusElement.classList.remove("high-spec");
+            modeStatusElement.classList.add("low-spec");
+        }
+}   
+
+        function toggleDisplay(id, show) {
+            document.getElementById(id).classList.toggle('hidden', !show);
+        }
+    
+        document.getElementById('return-button').onclick = () => toggleDisplay('confirm-returntoselectpage', true);
+        document.getElementById('confirm-yes').onclick = () => {
+            전원체크박스.checked = false;
+            updateStatusIndicator();
+            stopCalculationLoop();
+            toggleDisplay('main-content', false);
+            toggleDisplay('specselectpage', true);
+            toggleDisplay('confirm-returntoselectpage', false);
+        };
+        document.getElementById('confirm-no').onclick = () => toggleDisplay('confirm-returntoselectpage', false);
+    
+
+        
+        전원체크박스.addEventListener('change', () => {
+            updateStatusIndicator();
+            if (전원체크박스.checked) {
+                startCalculationLoop();
+            } else {
+                stopCalculationLoop();
+            }
+        });
+        updateTemperatureButtons();
+    </script>
+    
+</body>
+</html>
